@@ -1,0 +1,221 @@
+@base = http://localhost:{{$dotenv PORT}}/api/v1
+@token = {{login.response.body.$.token}}
+@orgId = {{organizacao.response.body.$.id}}
+@loteId = {{lote.response.body.$.id}}
+@equipamentoId = {{lote.response.body.$.equipamentos[0].id}}
+
+### Login (admin configurado no .env)
+# @name login
+# @status 200
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{"usuario":"{{$dotenv SEED_ADMIN_USER}}","senha":"{{$dotenv SEED_ADMIN_PASSWORD}}"}
+
+### Organização da jornada. O executor reutiliza o CNPJ se já existir.
+# @name organizacao
+# @status 201,409
+# @reuse-cnpj
+POST {{base}}/organizacoes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"razaoSocial":"Organização Jornada HTTP","cnpj":"04.252.011/0001-10","inscricaoEstadual":"12345","enderecoCompleto":"Rua Verde, 42","telefone":"11999999999","email":"jornada@exemplo.com"}
+
+### Contrato opcional. Para repetir manualmente, use sua versão atual.
+# @name contrato
+# @status 200
+# @version-from-organizacao
+PUT {{base}}/organizacoes/{{orgId}}/contrato
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"dataAssinatura":"{{$datetime iso8601}}","dataVencimento":"2100-01-01T00:00:00.000Z","clausulas":["Coleta e destinação responsável"],"valorMensal":250,"renovacaoAutomatica":true,"versao":1}
+
+### Lote e equipamento são criados na mesma transação
+# @name lote
+# @status 201
+POST {{base}}/lotes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"organizacaoId":"{{orgId}}","notaFiscal":"NF-JORNADA","transportadora":"Logística Verde","equipamentos":[{"codigoBarrasInterno":"HTTP-{{$guid}}","tipo":"NOTEBOOK","marca":"Dell","modelo":"Latitude","anoFabricacao":2024,"estadoFisico":1,"pesoQuilogramas":2.5,"posicaoNoLote":1}]}
+
+### Iniciar triagem
+# @name iniciarTriagem
+# @status 200
+POST {{base}}/lotes/{{loteId}}/triagem/iniciar
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"versao":1}
+
+### Concluir triagem
+# @name concluirTriagem
+# @status 200
+POST {{base}}/lotes/{{loteId}}/triagem/concluir
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"versao":2}
+
+### Classificação física com justificativa para salto de duas categorias
+# @name estadoFisico
+# @status 200
+PATCH {{base}}/equipamentos/{{equipamentoId}}/estado-fisico
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"novoEstado":3,"justificativa":"Inspeção identificou desgaste moderado","versao":1}
+
+### Triagem do equipamento
+# @name triagemEquipamento
+# @status 200
+PATCH {{base}}/equipamentos/{{equipamentoId}}/status-rastreamento
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"novoStatus":"EM_TRIAGEM","versao":2}
+
+### Aguardar desmonte
+# @name aguardarDesmonte
+# @status 200
+PATCH {{base}}/equipamentos/{{equipamentoId}}/status-rastreamento
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"novoStatus":"AGUARDANDO_DESMONTE","versao":3}
+
+### Desmontar
+# @name desmonte
+# @status 200
+PATCH {{base}}/equipamentos/{{equipamentoId}}/status-rastreamento
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"novoStatus":"EM_DESMONTE","versao":4}
+
+### Destinar
+# @name destinar
+# @status 200
+PATCH {{base}}/equipamentos/{{equipamentoId}}/status-rastreamento
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"novoStatus":"MATERIAL_RECICLAVEL","versao":5}
+
+### Baixa definitiva
+# @name baixa
+# @status 200
+PATCH {{base}}/equipamentos/{{equipamentoId}}/status-rastreamento
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"novoStatus":"BAIXA_DEFINITIVA","versao":6}
+
+### Encaminhar lote
+# @name encaminhar
+# @status 200
+PATCH {{base}}/lotes/{{loteId}}/status
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"status":"ENCAMINHADO","versao":3}
+
+### Finalizar lote
+# @name finalizar
+# @status 200
+PATCH {{base}}/lotes/{{loteId}}/status
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"status":"FINALIZADO","versao":4}
+
+### Peso total e equipamentos
+# @name consultarLote
+# @status 200
+GET {{base}}/lotes/{{loteId}}
+Authorization: Bearer {{token}}
+
+### Histórico completo
+# @name rastreio
+# @status 200
+GET {{base}}/equipamentos/{{equipamentoId}}/rastreio
+Authorization: Bearer {{token}}
+
+### Relatórios
+# @name financeiro
+# @status 200
+GET {{base}}/relatorios/financeiro?inicio=2000-01-01T00:00:00Z&fim=2100-01-01T00:00:00Z
+Authorization: Bearer {{token}}
+
+### Resumo
+# @name resumo
+# @status 200
+GET {{base}}/relatorios/resumo?inicio=2000-01-01T00:00:00Z&fim=2100-01-01T00:00:00Z
+Authorization: Bearer {{token}}
+
+### Por organização
+# @name porOrganizacao
+# @status 200
+GET {{base}}/relatorios/por-organizacao/{{orgId}}?inicio=2000-01-01T00:00:00Z&fim=2100-01-01T00:00:00Z
+Authorization: Bearer {{token}}
+
+### Por status
+# @name porStatus
+# @status 200
+GET {{base}}/relatorios/por-status?status=FINALIZADO
+Authorization: Bearer {{token}}
+
+### Journal
+# @name journal
+# @status 200
+GET {{base}}/auditoria/journal?usuario=admin&pageSize=20
+Authorization: Bearer {{token}}
+
+### Renovar token
+# @name renovar
+# @status 200
+POST {{base}}/auth/renovar
+Authorization: Bearer {{token}}
+
+### Logout: descartar token no cliente
+# @name logout
+# @status 204
+POST {{base}}/auth/logout
+Authorization: Bearer {{token}}
+
+### Negativo: CNPJ inválido -> 422 (execução manual, sem @name)
+POST {{base}}/organizacoes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"razaoSocial":"Inválida","cnpj":"11111111111111","inscricaoEstadual":"1","enderecoCompleto":"Rua A","telefone":"11999999999","email":"erro@exemplo.com"}
+
+### Negativo: data futura -> 422
+POST {{base}}/lotes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"organizacaoId":"{{orgId}}","notaFiscal":"NF-FUTURA","transportadora":"T","dataEntrada":"2100-01-01T00:00:00.000Z"}
+
+### Negativo: data anterior a 90 dias -> 422
+POST {{base}}/lotes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"organizacaoId":"{{orgId}}","notaFiscal":"NF-ANTIGA","transportadora":"T","dataEntrada":"2000-01-01T00:00:00.000Z"}
+
+### Negativo: estado 3 -> 6 sem justificativa -> 422
+PATCH {{base}}/equipamentos/{{equipamentoId}}/estado-fisico
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"novoEstado":6,"versao":7}
+
+### Negativo: baixa não volta ao desmonte -> 422
+PATCH {{base}}/equipamentos/{{equipamentoId}}/status-rastreamento
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"novoStatus":"EM_DESMONTE","versao":7}

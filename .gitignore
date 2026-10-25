@@ -1,0 +1,32 @@
+# Dependências
+node_modules/
+
+# Build / compilação
+/dist/
+*.tsbuildinfo
+
+# Dados de execução do sistema
+/data/
+*.log
+*.tmp
+
+# Cobertura e relatórios
+coverage/
+
+# Logs do npm
+npm-debug.log*
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# SO
+.DS_Store
+Thumbs.db
+.env
+.env.*
+!.env.example
+src/generated/
+tests/tmp-data/
